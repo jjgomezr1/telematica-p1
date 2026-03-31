@@ -1,15 +1,12 @@
-"""
-sensor_vibracion.py — Sensor de vibración mecánica simulado.
-Rango normal: 0.1–4.5
-Alerta del servidor: valor > 5.0  →  ALERT HIGH_VIBRATION
-"""
+# sensor_vibracion.py — Sensor de vibración mecánica simulado.
+# Rango normal: 0.1–4.5 | Alerta: valor > 5.0 → ALERT HIGH_VIBRATION
 
 import random
 from base_sensor import BaseSensor
 
 
 class SensorVibracion(BaseSensor):
-
+    # Vibración con 8% de probabilidad de generar alerta
     sensor_id = "sensor_vib_01"
     tipo      = "vibration"
 

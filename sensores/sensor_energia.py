@@ -1,15 +1,12 @@
-"""
-sensor_energia.py — Sensor de consumo energético simulado.
-Rango normal: 50–290 W
-Alerta del servidor: valor > 300 W  →  ALERT HIGH_ENERGY
-"""
+# sensor_energia.py — Sensor de consumo energético simulado.
+# Rango normal: 50–290 W | Alerta: valor > 300 W → ALERT HIGH_ENERGY
 
 import random
 from base_sensor import BaseSensor
 
 
 class SensorEnergia(BaseSensor):
-
+    # Energía con 6% de probabilidad de generar alerta
     sensor_id = "sensor_energy_01"
     tipo      = "energy"
 

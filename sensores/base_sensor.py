@@ -1,7 +1,5 @@
-"""
-base_sensor.py — Clase base para todos los sensores IoT simulados.
-Maneja: conexión TCP, registro, envío de mediciones y reconexión automática.
-"""
+# base_sensor.py — Clase base para todos los sensores IoT.
+# Proporciona la funcionalidad común: conexión TCP, registro, envío de mediciones y reconexión automática.
 
 import socket
 import threading
@@ -22,13 +20,11 @@ logging.basicConfig(
 
 
 class BaseSensor(threading.Thread):
-    """
-    Clase base para sensores IoT simulados.
-    Las subclases deben implementar:
-      - self.sensor_id  (str)  → identificador único del sensor
-      - self.tipo       (str)  → tipo de medición (temp, vibration, energy, humidity)
-      - generar_valor() (float)→ valor simulado a enviar
-    """
+    # Clase base para sensores IoT simulados que ejecutan en hilos independientes.
+    # Las subclases deben implementar:
+    #   - self.sensor_id  (str)  → identificador único del sensor
+    #   - self.tipo       (str)  → tipo de medición (temp, vibration, energy, humidity)
+    #   - generar_valor() (float)→ valor simulado a enviar
 
     def __init__(self):
         super().__init__(name=self.sensor_id, daemon=True)
@@ -41,9 +37,10 @@ class BaseSensor(threading.Thread):
     def stop(self):
         self._stop_event.set()
 
-    # ── Métodos de red ──────────────────────────────────────────────────
+    # Métodos de red 
 
     def _conectar(self) -> socket.socket | None:
+        # Conecta al servidor TCP y retorna el socket
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(10)
@@ -55,6 +52,7 @@ class BaseSensor(threading.Thread):
             return None
 
     def _recibir_linea(self, sock: socket.socket) -> str | None:
+        # Recibe una línea completa del servidor (bloqueante hasta \n)
         try:
             data = b""
             while not data.endswith(b"\n"):
@@ -67,6 +65,7 @@ class BaseSensor(threading.Thread):
             return None
 
     def _registrar(self, sock: socket.socket) -> bool:
+        # Envía comando REGISTER SENSOR al servidor
         try:
             sock.sendall(f"REGISTER SENSOR {self.sensor_id}\n".encode())
             respuesta = self._recibir_linea(sock)
@@ -80,6 +79,7 @@ class BaseSensor(threading.Thread):
             return False
 
     def _enviar_medicion(self, sock: socket.socket) -> bool:
+        # Envía comando MEASURE con valor generado, verifica alertas del servidor
         try:
             valor   = self.generar_valor()
             mensaje = f"MEASURE {self.sensor_id} {self.tipo} {valor}\n"
@@ -98,22 +98,26 @@ class BaseSensor(threading.Thread):
             self.log.error(f"Error enviando medición: {e}")
             return False
 
-    # ── Loop principal ──────────────────────────────────────────────────
+    # Loop principal
 
     def run(self):
+        # Loop principal: conecta → registra → envía mediciones en bucle
         self.log.info(f"Sensor iniciado. Tipo: {self.tipo}")
 
         while not self._stop_event.is_set():
+            # Intenta conectarse al servidor
             sock = self._conectar()
             if sock is None:
                 self._stop_event.wait(RECONNECT_DELAY)
                 continue
 
+            # Envía comando de registro
             if not self._registrar(sock):
                 sock.close()
                 self._stop_event.wait(RECONNECT_DELAY)
                 continue
 
+            # Bucle de envío de mediciones cada MEASURE_INTERVAL segundos
             try:
                 while not self._stop_event.is_set():
                     if not self._enviar_medicion(sock):
