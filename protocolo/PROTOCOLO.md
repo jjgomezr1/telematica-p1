@@ -1,7 +1,5 @@
 # Especificación del Protocolo de Aplicación - IoT Monitoring System
 
-**Documento de Protocolo | Persona 2**  
-
 ---
 
 ## 1. Visión General
@@ -93,18 +91,20 @@ LIST
 
 **Respuesta esperada:**
 ```
-OK <cantidad>
-<id> <tipo> <valor> <activo>
-<id> <tipo> <valor> <activo>
+SENSORS <cantidad>
+<id> <tipo> <valor>
+<id> <tipo> <valor>
 ...
+END
 ```
 
 **Ejemplo:**
 ```
 → LIST
-← OK 2
-← temp_sensor_01 temp 25.5 1
-← vibration_sensor_01 vibration 1.2 1
+← SENSORS 2
+← temp_sensor_01 temp 25.5
+← vibration_sensor_01 vibration 1.2
+← END
 ```
 
 ---
@@ -121,13 +121,13 @@ STATUS
 
 **Respuesta esperada:**
 ```
-OK active_sensors=<n> total_measurements=<n>
+STATUS OK
 ```
 
 **Ejemplo:**
 ```
 → STATUS
-← OK active_sensors=3 total_measurements=45
+← STATUS OK
 ```
 
 ---
@@ -158,6 +158,32 @@ OK registered <id_operador>
 
 ---
 
+### 2.6 Autenticación
+
+**Comando:** `AUTH`
+
+```
+AUTH <credencial>
+```
+
+**Descripción:** Autentica un cliente con credenciales.
+
+**Parámetros:**
+- `credencial`: token o credencial de autenticación
+
+**Respuesta esperada:**
+```
+OK auth <credencial>
+```
+
+**Ejemplo:**
+```
+→ AUTH token_12345
+← OK auth token_12345
+```
+
+---
+
 ## 3. Alertas
 
 El sistema genera alertas automáticas en los siguientes casos:
@@ -166,7 +192,7 @@ El sistema genera alertas automáticas en los siguientes casos:
 |---|---|---|
 | `temp` | valor > 90°C | `ALERT HIGH_TEMP <valor>` |
 | `vibration` | valor > 5.0 | `ALERT HIGH_VIBRATION <valor>` |
-| `energy` | valor > 500 W | `ALERT HIGH_ENERGY <valor>` |
+| `energy` | valor > 300 W | `ALERT HIGH_ENERGY <valor>` |
 
 ---
 
@@ -246,23 +272,24 @@ REGISTER OPERATOR operator_01
 OK registered operator_01
 
 LIST
-OK 1
-temp_sensor_01 temp 92.0 1
+SENSORS 1
+temp_sensor_01 temp 92.0
+END
 
 STATUS
-OK active_sensors=1 total_measurements=3
+STATUS OK
 ```
 
 ---
 
 ## 8. Consideraciones de Robustez
 
-1. **Reconexión automática:** Si un sensor pierde conexión, debe reintentar
+1. **Reconexión automática:** Si un sensor pierde conexión, debe reintentar cada 5 segundos
 2. **Manejo de errores:** Los clientes deben manejar excepciones de red
 3. **Validación:** El servidor valida todos los mensajes recibidos
 4. **Logging:** Todos los mensajes se registran (IP, puerto, contenido)
-5. **Limpieza:** Sensores desconectados se marcan como inactivos después de 60 segundos
+5. **Limpieza:** Sensores desconectados se marcan como inactivos inmediatamente cuando se cierra la conexión
+6. **Compatibilidad:** El servidor soporta múltiples conexiones simultáneas usando hilos independientes
+7. **Timeout:** La conexión se puede desconectar por inactividad (depende de la configuración del socket)
 
 ---
-
-**Especificación finalizada por: Persona 2**
