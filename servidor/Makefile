@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pthread -g
-SRC = src/main.c src/server.c src/client_handler.c src/protocol.c src/logger.c
+SRC = src/main.c src/logger.c src/protocol.c src/server.c src/client_handler.c src/sensor_list.c
 OUT = server
 
 all:
