@@ -1,0 +1,27 @@
+services:
+  iot-server:
+    build:
+      context: ./servidor
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./servidor/logs:/app/logs
+
+  iot-sensors:
+    build:
+      context: ./sensores
+    environment:
+      - SERVER_HOST=iot-server
+      - SERVER_PORT=9000
+    depends_on:
+      - iot-server
+
+  auth-web:
+    build:
+      context: ./auth_web
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./servidor/logs:/app/logs
+    depends_on:
+      - iot-server
