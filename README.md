@@ -65,14 +65,14 @@ Conéctese vía SSH a la instancia EC2 y ejecute el despliegue nativo mediante D
 
 ```bash
 # 1. Instalar dependencias esenciales
-sudo apt update && sudo apt install git docker.io docker-compose -y
+sudo apt update && sudo apt install git docker.io docker-compose-v2 -y
 
 # 2. Clonar el repositorio
 git clone https://github.com/jjgomezr1/telematica-p1.git
 cd telematica-p1
 
 # 3. Construir e iniciar backend, sensores simulados y la web externa
-sudo docker-compose up --build -d
+sudo docker compose up --build -d
 ```
 
 ### 3. Resolución de Nombres (DNS)
