@@ -107,7 +107,12 @@ static void procesar(int fd, ParsedMessage *msg, const char *ip, int port,
         case CMD_AUTH:     snprintf(msg_log, sizeof(msg_log), "AUTH %s", msg->args[0]); break;
         default:           snprintf(msg_log, sizeof(msg_log), "UNKNOWN"); break;
     }
-    log_event(ip, port, msg_log, respuesta);
+    
+    if (msg->type == CMD_LIST || msg->type == CMD_STATUS) {
+        log_event(ip, port, msg_log, "OMITIDO_MULTILINEA (Dashboard Safegaurd)");
+    } else {
+        log_event(ip, port, msg_log, respuesta);
+    }
 }
 
 void *handle_client(void *arg) {
