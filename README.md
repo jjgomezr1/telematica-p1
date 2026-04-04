@@ -80,3 +80,15 @@ El sistema evita utilizar direcciones IP codificadas en duro (hardcoded). En la 
 
 1. **Configuración Tecnológica (AWS Route 53):** Se configuró la arquitectura nativa exigida habilitando una Zona Hospedada en Route 53 con el dominio interno `sistema-iot-telematica-p1.com` configurando su respectivo registro de tipo 'A' hacia la IP de la instancia.
 2. **Demostración Global (Entorno en Vivo):** Dado que el dominio de Route 53 no fue comprado a la ICANN (por restricciones de laboratorio estudiantil), se vinculó simultáneamente la IP a un servicio de resolución dinámica gratuito (`http://telematica-iot.duckdns.org:5000`) para posibilitar accesos mundiales inmediatos durante la evaluación sin modificar archivos de host.
+
+### 4. Cliente Operador de Escritorio (Java GUI)
+El proyecto incluye además un cliente nativo en Java (Desarrollado en `operador_gui`) para tener monitoreo en tiempo real desde estaciones de escritorio. Como el servidor se encuentra desplegado publicamente en la nube, cualquier máquina con Java puede ejecutar la GUI remotamente conectándose así:
+
+```bash
+# Compilar los archivos (Desde la raíz del proyecto)
+cd operador_gui
+javac -d out src/operatorgui/*.java
+
+# Ejecutar conectándose a la arquitectura en la nube de AWS
+java -cp out operatorgui.OperatorMain telematica-iot.duckdns.org 9000 admin
+```
