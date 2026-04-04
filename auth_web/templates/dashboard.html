@@ -63,7 +63,7 @@
         }
         .logout-btn:hover { color: #f8fafc; }
     </style>
-    <meta http-equiv="refresh" content="5"> <!-- Auto-refresh cada 5s -->
+    <!-- Auto-refresh desactivado a petición del usuario -->
 </head>
 <body>
     <div class="container">
@@ -91,8 +91,15 @@
             </div>
         </div>
         
+        <div class="card">
+            <h2 style="margin:0; margin-bottom:1rem;">Alertas Recientes</h2>
+            <div class="log-container" style="max-height: 200px;">
+                <!-- ALERTAS_PLACEHOLDER -->
+            </div>
+        </div>
+
         <p style="text-align: center; color: var(--text-muted); font-size: 0.75rem;">
-            Los datos se actualizan automáticamente cada 5 segundos.
+            Para actualizar los valores, refresque la página (F5 o botón de recargar).
         </p>
     </div>
 </body>

@@ -2,11 +2,15 @@
 #include "protocol.h"
 #include "logger.h"
 #include "sensor_list.h"
+#include "operator_list.h"
+#include "alert_history.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 
 #define BUFFER_SIZE 1024
 #define TIPO_DESCONOCIDO 0
@@ -34,6 +38,7 @@ static void procesar(int fd, ParsedMessage *msg, const char *ip, int port,
                 sensor_list_register(msg->args[1], "desconocido");
             } else if (strcmp(msg->args[0], "OPERATOR") == 0) {
                 *tipo_cliente = TIPO_OPERADOR;
+                operator_list_add(fd);
             } else {
                 snprintf(respuesta, sizeof(respuesta), "ERROR tipo invalido\n");
                 break;
@@ -63,6 +68,12 @@ static void procesar(int fd, ParsedMessage *msg, const char *ip, int port,
             } else {
                 snprintf(respuesta, sizeof(respuesta), "OK\n");
             }
+            if (strncmp(respuesta, "ALERT", 5) == 0) {
+                operator_list_broadcast(respuesta);
+                alert_history_add(respuesta);
+                // Also reply OK to sensor so it continues
+                snprintf(respuesta, sizeof(respuesta), "OK\n");
+            }
             break;
 
         case CMD_LIST: {
@@ -83,13 +94,57 @@ static void procesar(int fd, ParsedMessage *msg, const char *ip, int port,
             snprintf(respuesta, sizeof(respuesta), "STATUS OK\n");
             break;
 
-        case CMD_AUTH:
+        case CMD_AUTH: {
             if (msg->argc < 2) {
                 snprintf(respuesta, sizeof(respuesta), "ERROR faltan argumentos\n");
+                break;
+            }
+            
+            // Validación real contra identity-svc
+            struct hostent *server = gethostbyname("identity-svc");
+            if (server == NULL) {
+                snprintf(respuesta, sizeof(respuesta), "ERROR identity service unreachable\n");
+                break;
+            }
+
+            int auth_fd = socket(AF_INET, SOCK_STREAM, 0);
+            struct sockaddr_in auth_addr;
+            memset(&auth_addr, 0, sizeof(auth_addr));
+            auth_addr.sin_family = AF_INET;
+            memcpy(&auth_addr.sin_addr.s_addr, server->h_addr, server->h_length);
+            auth_addr.sin_port = htons(5001);
+
+            if (connect(auth_fd, (struct sockaddr *)&auth_addr, sizeof(auth_addr)) < 0) {
+                snprintf(respuesta, sizeof(respuesta), "ERROR connection to identity-svc failed\n");
+                close(auth_fd);
+                break;
+            }
+
+            char auth_req[128], auth_res[128];
+            snprintf(auth_req, sizeof(auth_req), "AUTH %s %s\n", msg->args[0], msg->args[1]);
+            send(auth_fd, auth_req, strlen(auth_req), 0);
+            int n = recv(auth_fd, auth_res, sizeof(auth_res)-1, 0);
+            close(auth_fd);
+
+            if (n > 0) {
+                auth_res[n] = '\0';
+                if (strncmp(auth_res, "OK", 2) == 0) {
+                    snprintf(respuesta, sizeof(respuesta), "OK auth accepted\n");
+                } else {
+                    snprintf(respuesta, sizeof(respuesta), "ERROR auth denied\n");
+                }
             } else {
-                snprintf(respuesta, sizeof(respuesta), "OK auth %s\n", msg->args[0]);
+                snprintf(respuesta, sizeof(respuesta), "ERROR identity service response empty\n");
             }
             break;
+        }
+
+        case CMD_ALERTS: {
+            char historial[2048];
+            alert_history_get_all(historial, sizeof(historial));
+            snprintf(respuesta, sizeof(respuesta), "ALERTS_START\n%sALERTS_END\n", historial);
+            break;
+        }
 
         default:
             snprintf(respuesta, sizeof(respuesta), "ERROR comando desconocido\n");
@@ -138,12 +193,16 @@ void *handle_client(void *arg) {
             log_event(ip, port, "DESCONEXION", id_cliente);
             if (tipo_cliente == TIPO_SENSOR)
                 sensor_list_remove(id_cliente);
+            else if (tipo_cliente == TIPO_OPERADOR)
+                operator_list_remove(fd);
             break;
         }
         if (bytes < 0) {
             log_error(ip, port, "error en recv");
             if (tipo_cliente == TIPO_SENSOR)
                 sensor_list_remove(id_cliente);
+            else if (tipo_cliente == TIPO_OPERADOR)
+                operator_list_remove(fd);
             break;
         }
 

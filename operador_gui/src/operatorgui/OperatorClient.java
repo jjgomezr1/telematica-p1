@@ -41,8 +41,10 @@ public class OperatorClient {
 
     public synchronized void connect(String host, int port, String operatorId) {
         if (connectionThread != null && connectionThread.isAlive()) {
-            listener.onInfoMessage("Ya hay una conexion activa o en progreso.");
-            return;
+            manualDisconnectRequested = true;
+            running = false;
+            connectionThread.interrupt();
+            try { connectionThread.join(1000); } catch (InterruptedException ignored) {}
         }
 
         this.host = host;
@@ -158,6 +160,8 @@ public class OperatorClient {
         String line;
 
         while (running && currentReader != null && (line = currentReader.readLine()) != null) {
+            if (!running) break;
+
             line = line.trim();
             if (line.isEmpty()) {
                 continue;
@@ -303,24 +307,9 @@ public class OperatorClient {
 
     private void closeSocket() {
         synchronized (writerLock) {
-            if (reader != null) {
-                try {
-                    reader.close();
-                } catch (IOException ignored) {
-                }
-            }
-
-            if (writer != null) {
-                writer.close();
-            }
-
-            if (socket != null) {
-                try {
-                    socket.close();
-                } catch (IOException ignored) {
-                }
-            }
-
+            try { if (reader != null) reader.close(); } catch (IOException ignored) {}
+            try { if (writer != null) writer.close(); } catch (Exception ignored) {}
+            try { if (socket != null && !socket.isClosed()) socket.close(); } catch (IOException ignored) {}
             reader = null;
             writer = null;
             socket = null;

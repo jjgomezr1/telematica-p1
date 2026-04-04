@@ -108,7 +108,8 @@ public class OperatorFrame extends JFrame implements OperatorEventListener {
         };
 
         JTable sensorTable = new JTable(sensorTableModel);
-        sensorTable.setRowHeight(24);
+        sensorTable.setFont(new Font("Segoe UI", Font.PLAIN, 16));
+        sensorTable.setRowHeight(30);
         sensorTable.setFillsViewportHeight(true);
         sensorTable.setBackground(PANEL_ALT);
         sensorTable.setForeground(TEXT);
@@ -117,7 +118,7 @@ public class OperatorFrame extends JFrame implements OperatorEventListener {
         sensorTable.setSelectionForeground(TEXT);
         sensorTable.getTableHeader().setBackground(new Color(15, 23, 42));
         sensorTable.getTableHeader().setForeground(TEXT);
-        sensorTable.getTableHeader().setFont(sensorTable.getTableHeader().getFont().deriveFont(Font.BOLD));
+        sensorTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 17));
 
         root.add(buildHeaderPanel(), BorderLayout.NORTH);
         root.add(buildBodyPanel(sensorTable), BorderLayout.CENTER);
@@ -142,13 +143,13 @@ public class OperatorFrame extends JFrame implements OperatorEventListener {
 
         JLabel title = new JLabel("Centro de Operacion IoT");
         title.setForeground(TEXT);
-        title.setFont(new Font("Segoe UI Semibold", Font.BOLD, 28));
+        title.setFont(new Font("Segoe UI Semibold", Font.BOLD, 32));
 
         JLabel subtitle = new JLabel(
             "Cliente operador con GUI para supervisar sensores activos, mediciones y alertas."
         );
         subtitle.setForeground(MUTED);
-        subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 16));
 
         titlePanel.add(title);
         titlePanel.add(subtitle);
@@ -221,7 +222,7 @@ public class OperatorFrame extends JFrame implements OperatorEventListener {
 
         JLabel titleLabel = new JLabel(title);
         titleLabel.setForeground(TEXT);
-        titleLabel.setFont(new Font("Segoe UI Semibold", Font.BOLD, 18));
+        titleLabel.setFont(new Font("Segoe UI Semibold", Font.BOLD, 20));
 
         panel.add(titleLabel, BorderLayout.NORTH);
         panel.add(content, BorderLayout.CENTER);
@@ -248,7 +249,7 @@ public class OperatorFrame extends JFrame implements OperatorEventListener {
 
         JLabel titleLabel = new JLabel(title);
         titleLabel.setForeground(MUTED);
-        titleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        titleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 15));
 
         panel.add(titleLabel, BorderLayout.NORTH);
         panel.add(valueLabel, BorderLayout.CENTER);
@@ -271,6 +272,7 @@ public class OperatorFrame extends JFrame implements OperatorEventListener {
 
     private JTextField createField(String value, int columns) {
         JTextField field = new JTextField(value, columns);
+        field.setFont(new Font("Segoe UI", Font.PLAIN, 16));
         field.setMargin(new Insets(8, 10, 8, 10));
         field.setBackground(PANEL_ALT);
         field.setForeground(TEXT);
@@ -281,6 +283,7 @@ public class OperatorFrame extends JFrame implements OperatorEventListener {
 
     private JButton createButton(String text, Color foreground, Color background) {
         JButton button = new JButton(text);
+        button.setFont(new Font("Segoe UI Semibold", Font.BOLD, 15));
         button.setFocusPainted(false);
         button.setForeground(TEXT);
         button.setBackground(background);
@@ -294,14 +297,14 @@ public class OperatorFrame extends JFrame implements OperatorEventListener {
     private JLabel createInlineLabel(String text) {
         JLabel label = new JLabel(text);
         label.setForeground(MUTED);
-        label.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        label.setFont(new Font("Segoe UI", Font.PLAIN, 15));
         return label;
     }
 
     private JLabel createValueLabel(String text, Color color) {
         JLabel label = new JLabel(text);
         label.setForeground(color);
-        label.setFont(new Font("Segoe UI Semibold", Font.BOLD, 15));
+        label.setFont(new Font("Segoe UI Semibold", Font.BOLD, 18));
         return label;
     }
 
@@ -313,15 +316,31 @@ public class OperatorFrame extends JFrame implements OperatorEventListener {
         area.setBackground(PANEL_ALT);
         area.setForeground(TEXT);
         area.setCaretColor(TEXT);
-        area.setFont(new Font("Consolas", Font.PLAIN, 13));
+        area.setFont(new Font("Consolas", Font.PLAIN, 15));
         area.setBorder(new EmptyBorder(10, 10, 10, 10));
         return area;
     }
 
     private void wireActions() {
         connectButton.addActionListener(e -> connect());
-        disconnectButton.addActionListener(e -> client.disconnect());
+        disconnectButton.addActionListener(e -> {
+            new Thread(() -> client.disconnect()).start();
+            clearUI();
+        });
         refreshButton.addActionListener(e -> client.requestRefresh());
+    }
+
+    private void clearUI() {
+        SwingUtilities.invokeLater(() -> {
+            measurementsArea.setText("");
+            alertsArea.setText("");
+            sensorTableModel.setRowCount(0);
+            previousSensors.clear();
+            activeSensorsLabel.setText("0 sensores");
+            lastUpdateLabel.setText("Sin actualizacion");
+            systemLabel.setText("Sin datos");
+            systemLabel.setForeground(MUTED);
+        });
     }
 
     private void connect() {

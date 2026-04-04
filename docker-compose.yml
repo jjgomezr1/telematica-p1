@@ -23,5 +23,15 @@ services:
       - "5000:5000"
     volumes:
       - ./servidor/logs:/app/logs
+    environment:
+      - IOT_SERVER_HOST=iot-server
+      - IOT_SERVER_PORT=9000
+      - IDENTITY_SVC_HOST=identity-svc
+      - IDENTITY_SVC_PORT=5001
     depends_on:
       - iot-server
+      - identity-svc
+
+  identity-svc:
+    build:
+      context: ./identidad_svc

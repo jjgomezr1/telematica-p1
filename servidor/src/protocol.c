@@ -21,6 +21,7 @@ ParsedMessage parse_message(const char *raw) {
     else if (strcmp(token, "LIST")     == 0) msg.type = CMD_LIST;
     else if (strcmp(token, "STATUS")   == 0) msg.type = CMD_STATUS;
     else if (strcmp(token, "AUTH")     == 0) msg.type = CMD_AUTH;
+    else if (strcmp(token, "ALERTS")   == 0) msg.type = CMD_ALERTS;
 
     //resto de tokens: argumentos
     while ((token = strtok(NULL, " \n\r")) && msg.argc < MAX_ARGS) {
