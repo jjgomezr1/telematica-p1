@@ -11,6 +11,7 @@ typedef enum {
     CMD_LIST,
     CMD_STATUS,
     CMD_AUTH,
+    CMD_ALERTS,
     CMD_UNKNOWN
 } CommandType;
 

@@ -1,0 +1,26 @@
+# Entornos virtuales e instalación de dependencias de Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# Archivos compilados de C
+*.o
+*.out
+servidor/server
+
+# Logs generados por la aplicación
+*.log
+servidor/logs/server.log
+
+# Archivos temporales de herramientas o sistema operativo
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Archivos específicos del proyecto
+INSTRUCTIONS.txt
+operador_gui/out/
