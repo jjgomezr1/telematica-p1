@@ -111,7 +111,7 @@ static void procesar(int fd, ParsedMessage *msg, const char *ip, int port,
             struct sockaddr_in auth_addr;
             memset(&auth_addr, 0, sizeof(auth_addr));
             auth_addr.sin_family = AF_INET;
-            memcpy(&auth_addr.sin_addr.s_addr, server->h_addr, server->h_length);
+            memcpy(&auth_addr.sin_addr, server->h_addr_list[0], server->h_length);
             auth_addr.sin_port = htons(5001);
 
             if (connect(auth_fd, (struct sockaddr *)&auth_addr, sizeof(auth_addr)) < 0) {
