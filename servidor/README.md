@@ -1,77 +1,36 @@
-# Servidor IoT en C
+# Servidor IoT
+Este directorio contiene el backend TCP del sistema IoT. El servidor recibe conexiones de sensores y operadores, procesa comandos del protocolo de texto y mantiene estado en memoria para sensores, operadores y alertas.
 
-Este directorio contiene el servidor principal del sistema IoT. Está escrito en C y escucha conexiones TCP de sensores y operadores para registrar dispositivos, recibir mediciones, emitir alertas y entregar información del estado actual del sistema.
+## Estructura del servidor
 
-## Propósito
+- `src/main.c`: arranque del proceso e inicializacion global.
+- `src/server.c`: socket TCP, `bind`, `listen`, `accept` y creacion de hilos por cliente.
+- `src/client_handler.c`: ciclo de lectura por cliente y logica de comandos.
+- `src/protocol.c`: parser del protocolo de texto.
+- `src/sensor_list.c`: inventario de sensores activos y ultimo valor.
+- `src/operator_list.c`: lista de operadores conectados para broadcast de alertas.
+- `src/alert_history.c`: historial circular de alertas (ultimas `MAX_HISTORIAL`).
+- `src/logger.c`: logs por consola y archivo.
 
-El servidor actúa como el punto central de comunicación entre:
+## Flujo principal
 
-- Sensores, que se registran y envían mediciones.
-- Operadores, que reciben alertas en tiempo real y pueden consultar el estado del sistema.
-- El servicio de identidad, usado para validar credenciales en el comando `AUTH`.
+1. `main()` valida argumentos (`puerto` y `archivoDeLogs`).
+2. Inicializa servicios compartidos:
+	 - `logger_init()`
+	 - `sensor_list_init()`
+	 - `operator_list_init()`
+	 - `alert_history_init()`
+3. Ejecuta `server_run(puerto)`.
+4. `server_run()` acepta conexiones y crea un hilo por cliente con `handle_client()`.
+5. Cada hilo parsea lineas entrantes y ejecuta `procesar()`.
 
-Además de atender clientes, el servidor mantiene:
+## Protocolo soportado (actual)
 
-- Una lista de sensores activos y su último valor reportado.
-- Una lista de operadores conectados para hacer broadcast de alertas.
-- Un historial circular de alertas recientes.
-- Un registro de eventos en consola y en archivo.
+Todos los mensajes son lineas de texto terminadas en `\n`.
 
-## Estructura del módulo
+### 1) REGISTER
 
-- `src/main.c`: punto de entrada del binario.
-- `src/server.c`: crea el socket TCP, escucha conexiones y lanza un hilo por cliente.
-- `src/client_handler.c`: lee comandos de cada cliente y decide cómo responder.
-- `src/protocol.c`: convierte texto crudo en mensajes parseados.
-- `src/sensor_list.c`: administra sensores registrados y sus lecturas.
-- `src/operator_list.c`: administra operadores conectados y reenvía alertas.
-- `src/alert_history.c`: guarda el historial de alertas en una cola circular.
-- `src/logger.c`: imprime y persiste logs con marca de tiempo.
-
-## Flujo de ejecución
-
-### 1. Arranque
-
-El proceso comienza en `main()`:
-
-1. Valida los argumentos de entrada.
-2. Inicializa el logger.
-3. Inicializa las estructuras globales del sistema.
-4. Llama a `server_run(puerto)` para empezar a aceptar conexiones.
-
-Formato de uso:
-
-```bash
-./server <puerto> <archivoDeLogs>
-```
-
-Ejemplo:
-
-```bash
-./server 9000 logs/server.log
-```
-
-### 2. Escucha de conexiones
-
-`server_run()` crea un socket TCP, activa `SO_REUSEADDR`, hace `bind()` sobre el puerto indicado y luego entra en un ciclo infinito de `accept()`.
-
-Cada cliente aceptado se registra con su IP y puerto de origen, se envía a un hilo independiente mediante `pthread_create()` y el hilo se separa con `pthread_detach()`.
-
-### 3. Atención por cliente
-
-`handle_client()` recibe los bytes del socket, acumula fragmentos hasta encontrar saltos de línea y procesa cada comando completo con `parse_message()`.
-
-Este diseño permite soportar mensajes que lleguen partidos en varias lecturas de `recv()`.
-
-## Protocolo soportado
-
-Los comandos que entiende el servidor están definidos en `protocol.h` y se parsean en `parse_message()`.
-
-### `REGISTER`
-
-Registra un cliente en el sistema.
-
-Uso esperado:
+Formato:
 
 ```text
 REGISTER SENSOR <id>
@@ -80,50 +39,37 @@ REGISTER OPERATOR <id>
 
 Comportamiento:
 
-- Si el cliente es un sensor, se guarda en `sensor_list`.
-- Si el cliente es un operador, se agrega a `operator_list`.
-- Responde con `OK registered <id>`.
+- Registra el tipo de cliente.
+- Si es sensor, lo agrega a `sensor_list`.
+- Si es operador, guarda su socket en `operator_list`.
+- Respuesta: `OK registered <id>`.
 
-### `MEASURE`
+### 2) MEASURE
 
-Permite a un sensor enviar una lectura.
-
-Uso esperado:
+Formato:
 
 ```text
 MEASURE <id> <tipo> <valor>
 ```
 
-Ejemplos de tipos usados por el código:
+Reglas:
 
-- `temp`
-- `vibration`
-- `energy`
+- Solo clientes tipo sensor pueden enviar mediciones.
+- Actualiza el valor del sensor con `sensor_list_update()`.
+- Evalua umbrales:
+	- `temp > 90.0` -> `ALERT HIGH_TEMP`
+	- `vibration > 5.0` -> `ALERT HIGH_VIBRATION`
+	- `energy > 300.0` -> `ALERT HIGH_ENERGY`
 
-Comportamiento:
+Si hay alerta:
 
-- Solo se acepta desde sensores registrados.
-- Actualiza el último valor del sensor.
-- Si supera ciertos umbrales, genera una alerta.
-- Si no supera el umbral, responde `OK`.
+- Se hace broadcast a operadores con `operator_list_broadcast()`.
+- Se guarda en historial con `alert_history_add()`.
+- Al sensor se le responde `OK` para no cortar su flujo.
 
-Umbrales actuales:
+### 3) LIST
 
-- Temperatura: mayor que `90.0` genera `ALERT HIGH_TEMP`.
-- Vibración: mayor que `5.0` genera `ALERT HIGH_VIBRATION`.
-- Energía: mayor que `300.0` genera `ALERT HIGH_ENERGY`.
-
-Cuando se genera una alerta:
-
-1. Se envía a todos los operadores conectados.
-2. Se guarda en el historial de alertas.
-3. El sensor recibe igualmente `OK` para no interrumpir su flujo.
-
-### `LIST`
-
-Devuelve la lista de sensores activos con su estado actual.
-
-Salida general:
+Retorna sensores activos:
 
 ```text
 SENSORS <n>
@@ -132,183 +78,208 @@ SENSORS <n>
 END
 ```
 
-### `STATUS`
+### 4) STATUS
 
-Retorna un mensaje simple de salud:
+Respuesta de salud:
 
 ```text
 STATUS OK
 ```
 
-### `AUTH`
+### 5) AUTH
 
-Valida credenciales contra el servicio `identity-svc`.
-
-Uso esperado:
+Formato:
 
 ```text
 AUTH <usuario> <clave>
 ```
 
-Comportamiento:
+Flujo:
 
-- Resuelve `identity-svc` por DNS interno del entorno Docker.
-- Se conecta al puerto `5001`.
-- Envía `AUTH usuario clave` al servicio de identidad.
-- Responde `OK auth accepted` o `ERROR auth denied`.
+- Resuelve `identity-svc`.
+- Conecta por TCP al puerto `5001`.
+- Reenvia `AUTH usuario clave` al servicio de identidad.
+- Responde al cliente:
+	- `OK auth accepted` si identidad responde OK.
+	- `ERROR auth denied` o mensaje de error de conectividad en otros casos.
 
-Si el servicio no está disponible, devuelve un error explicando el fallo de conexión.
+### 6) ALERTS
 
-### `ALERTS`
-
-Devuelve el historial reciente de alertas guardadas en memoria.
-
-Formato:
+Devuelve historial de alertas en memoria:
 
 ```text
 ALERTS_START
+<alerta_1>
 ...
 ALERTS_END
 ```
 
-## Funciones principales
+## Funciones clave por modulo
 
-### `main()`
+### `src/main.c`
 
-Archivo: `src/main.c`
+- `main(int argc, char *argv[])`: punto de entrada del programa.
+	- Valida argumentos de ejecucion (`puerto` y `archivoDeLogs`).
+	- Inicializa logger, lista de sensores, lista de operadores e historial de alertas.
+	- Arranca el loop principal de red con `server_run(...)`.
 
-Responsabilidad:
+### `src/server.c`
 
-- Recibir puerto y ruta del archivo de logs.
-- Inicializar logger, listas y historial.
-- Ejecutar el servidor.
-- Cerrar el logger al terminar.
+- `server_run(int puerto)`: ciclo de vida del servidor TCP.
+	- Crea y configura socket (`socket`, `setsockopt`, `bind`, `listen`).
+	- Acepta conexiones entrantes con `accept`.
+	- Obtiene IP/puerto del cliente para logging.
+	- Crea un hilo detached por cliente para delegar la atencion sin bloquear nuevas conexiones.
 
-### `server_run(int puerto)`
+### `src/client_handler.c`
 
-Archivo: `src/server.c`
+- `handle_client(void *arg)`: atiende una conexion individual.
+	- Mantiene un loop de `recv` hasta desconexion/error.
+	- Recompone mensajes por linea para soportar paquetes fragmentados.
+	- Parsea cada linea con `parse_message` y delega en `procesar`.
+	- Limpia estado al desconectar (sensor u operador).
+- `procesar(...)`: nucleo de negocio del protocolo.
+	- Ejecuta comandos `REGISTER`, `MEASURE`, `LIST`, `STATUS`, `AUTH` y `ALERTS`.
+	- Actualiza estructuras en memoria y dispara alertas cuando aplica.
+	- Construye la respuesta de texto y registra el evento en logs.
+- `responder(int fd, const char *msg)`: envia la respuesta final al socket cliente.
 
-Responsabilidad:
+### `src/protocol.c`
 
-- Crear y configurar el socket TCP.
-- Escuchar en todas las interfaces.
-- Aceptar conexiones infinitamente.
-- Construir la estructura `ClientInfo` para cada cliente.
-- Lanzar un hilo por conexión.
+- `parse_message(const char *raw)`: parser de mensajes de una linea.
+	- Identifica el tipo de comando (`CMD_*`).
+	- Extrae argumentos y los guarda en `ParsedMessage` con limites de longitud.
 
-### `handle_client(void *arg)`
+### `src/sensor_list.c`
 
-Archivo: `src/client_handler.c`
+- `sensor_list_init()`: limpia la estructura global de sensores al arranque.
+- `sensor_list_register(const char *id, const char *tipo)`: agrega un sensor nuevo si no existe.
+- `sensor_list_update(const char *id, const char *tipo, double valor)`: actualiza tipo y ultimo valor reportado.
+- `sensor_list_remove(const char *id)`: marca un sensor como inactivo al desconectarse.
+- `sensor_list_get_all(SensorEntry *destino, int max)`: devuelve una copia de sensores activos para comandos como `LIST`.
 
-Responsabilidad:
+Notas:
 
-- Recibir datos del socket.
-- Reensamblar mensajes por línea.
-- Parsear cada comando.
-- Llamar a `procesar()` para aplicar la lógica.
-- Limpiar el estado del cliente al desconectarse.
+- Este modulo usa mutex para proteger concurrencia entre hilos.
+- `total` refleja sensores registrados historicamente; el campo `activo` indica si siguen conectados.
 
-### `parse_message(const char *raw)`
+### `src/operator_list.c`
 
-Archivo: `src/protocol.c`
+- `operator_list_init()`: inicializa la tabla de sockets de operadores.
+- `operator_list_add(int fd)`: registra el socket de un operador conectado.
+- `operator_list_remove(int fd)`: elimina el socket cuando el operador se desconecta.
+- `operator_list_broadcast(const char *mensaje)`: envia una alerta a todos los operadores activos.
 
-Responsabilidad:
+Notas:
 
-- Separar el comando principal y sus argumentos.
-- Identificar el tipo de mensaje.
-- Copiar los argumentos en una estructura segura de tamaño fijo.
+- La lista tiene capacidad fija (`MAX_OPERATORS`).
+- Las operaciones estan protegidas por mutex para evitar carreras.
 
-### `sensor_list_*()`
+### `src/alert_history.c`
 
-Archivo: `src/sensor_list.c`
+- `alert_history_init()`: inicializa la cola circular y su mutex.
+- `alert_history_add(const char *alerta)`: inserta una alerta nueva en memoria.
+- `alert_history_get_all(char *destino, int max_size)`: serializa el historial completo a texto para responder `ALERTS`.
 
-Responsabilidad:
+El historial es circular: cuando se llena (`MAX_HISTORIAL = 20`), sobrescribe alertas antiguas.
 
-- Inicializar la lista.
-- Registrar sensores nuevos.
-- Actualizar el tipo y último valor.
-- Marcar sensores como inactivos al desconectarse.
-- Entregar una copia de la lista para el comando `LIST`.
+### `src/logger.c`
 
-La implementación usa un mutex global para proteger accesos concurrentes desde varios hilos.
+- `logger_init(const char *filepath)`: abre el archivo de log en modo append.
+- `log_event(const char *ip, int port, const char *mensaje, const char *respuesta)`: registra eventos normales en consola y archivo con timestamp.
+- `log_error(const char *ip, int port, const char *descripcion)`: registra errores operativos de red/procesamiento.
+- `logger_close()`: cierra el archivo al finalizar el proceso.
 
-### `operator_list_*()`
+## Concurrencia y seguridad basica
 
-Archivo: `src/operator_list.c`
+- Hay un hilo por cliente (`pthread`).
+- Estructuras compartidas usan mutex:
+	- sensores (`sensor_list`)
+	- operadores (`operator_list`)
+	- historial (`alert_history`)
+	- logger (`logger`)
 
-Responsabilidad:
+## Compilacion
 
-- Inicializar la lista de operadores.
-- Agregar o quitar sockets activos.
-- Reenviar alertas a todos los operadores conectados.
-
-### `alert_history_*()`
-
-Archivo: `src/alert_history.c`
-
-Responsabilidad:
-
-- Inicializar el historial circular.
-- Guardar alertas nuevas sobreescribiendo las más antiguas cuando se llena.
-- Exportar el historial acumulado para el comando `ALERTS`.
-
-### `log_event()` y `log_error()`
-
-Archivo: `src/logger.c`
-
-Responsabilidad:
-
-- Imprimir eventos con timestamp.
-- Persistirlos en el archivo configurado.
-- Proteger la escritura con mutex para evitar mezclas entre hilos.
-
-## Construcción
-
-El archivo `Makefile` genera el binario `server`.
+Desde este directorio:
 
 ```bash
 make
 ```
 
-Para limpiar el binario:
+Genera el binario `server` con:
+
+```make
+src/main.c src/logger.c src/protocol.c src/server.c src/client_handler.c src/sensor_list.c src/operator_list.c src/alert_history.c
+```
+
+Limpiar:
 
 ```bash
 make clean
 ```
 
-## Uso local
+## Ejecucion
 
-### Compilación nativa
-
-Desde esta carpeta:
-
-```bash
-make
-./server 9000 logs/server.log
-```
-
-### Contenedor Docker
-
-El `Dockerfile` compila el binario dentro de `ubuntu:22.04`, crea `logs/` y deja el servidor escuchando en el puerto `9000`.
-
-Comando que usa el contenedor:
+### Nativo
 
 ```bash
 ./server 9000 logs/server.log
 ```
 
-## Sincronización con el resto del sistema
+### Docker (segun `Dockerfile`)
 
-Este servidor está pensado para trabajar con el resto de la arquitectura del proyecto:
+- Base: `ubuntu:22.04`
+- Instala: `gcc`, `make`
+- Compila con `make`
+- Expone: `9000`
+- Comando final:
 
-- Los sensores del directorio `sensores/` envían registros y mediciones.
-- La interfaz web de `auth_web/` consulta el historial y el estado del servidor.
-- El servicio `identidad_svc/` valida credenciales para `AUTH`.
+```bash
+./server 9000 logs/server.log
+```
 
-En el `docker-compose.yml` del proyecto raíz, este servicio expone el puerto `9000` y comparte la carpeta `servidor/logs` como volumen para conservar los logs fuera del contenedor.
+## Integracion con el proyecto
 
-## Observaciones técnicas
+El servidor es el eje de comunicacion entre los demas componentes. Esta es la interaccion real por flujo:
 
-- El servidor trabaja con hilos por cliente y usa mutexes en las estructuras compartidas.
-- Los comandos `LIST` y `STATUS` generan respuestas multilinea, por eso el logger marca esos casos para evitar registrar contenido largo en forma completa.
-- El manejo de alertas está orientado a mantener informados a los operadores en tiempo real sin bloquear la recepción de sensores.
+### Flujo 1: Sensores -> Servidor -> Operadores
+
+1. Un sensor del modulo `sensores/` abre socket TCP hacia el servidor (`iot-server:9000`).
+2. El sensor envia `REGISTER SENSOR <id>` para quedar registrado.
+3. Envia periodicamente `MEASURE <id> <tipo> <valor>`.
+4. El servidor actualiza `sensor_list`.
+5. Si el valor supera umbral, el servidor:
+	- genera una alerta,
+	- la guarda en `alert_history`,
+	- y la reenvia a todos los operadores activos por `operator_list_broadcast`.
+
+Resultado: los operadores ven alertas en tiempo real sin hacer polling constante.
+
+### Flujo 2: Operador (GUI/Web) -> Servidor
+
+1. Un cliente operador (Java GUI en `operador_gui/` o frontend en `auth_web/`) se conecta al puerto 9000.
+2. Envia `REGISTER OPERATOR <id>` para suscribirse a alertas push.
+3. Puede consultar estado bajo demanda con:
+	- `LIST` para sensores activos y ultimo valor,
+	- `STATUS` para health-check,
+	- `ALERTS` para recuperar historial reciente.
+
+Resultado: el operador combina snapshot actual (`LIST`) + stream de alertas + historial.
+
+### Flujo 3: Operador -> Servidor -> Identity Service
+
+1. El operador inicia autenticacion con `AUTH <usuario> <clave>`.
+2. El servidor abre una conexion saliente a `identity-svc:5001`.
+3. Reenvia la solicitud `AUTH` y espera respuesta.
+4. Devuelve al cliente `OK auth accepted` o `ERROR auth denied`.
+
+Resultado: la validacion de credenciales queda centralizada en `identidad_svc/`, no en el servidor TCP.
+
+### Orquestacion en Docker
+
+- En `docker-compose.yml`, el servicio del servidor se publica como `iot-server` y expone `9000:9000`.
+- Sensores y web usan DNS interno de Docker para resolver `iot-server` e `identity-svc`.
+- `servidor/logs` se monta como volumen para persistir `server.log` fuera del contenedor.
+
+Esto permite levantar toda la arquitectura en conjunto y mantener separacion clara de responsabilidades entre captura (sensores), procesamiento/transporte (servidor), autenticacion (identity-svc) y visualizacion (web/gui).
