@@ -1,7 +1,5 @@
 # Cliente Operador con GUI
 
-Implementacion de la **Persona 3** del proyecto: un cliente operador de escritorio en **Java Swing** que se conecta al servidor TCP del sistema IoT.
-
 ## Que hace
 
 - Se conecta al servidor usando `host`, `puerto` e `id` de operador configurables.
